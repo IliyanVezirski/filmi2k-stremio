@@ -38,6 +38,83 @@ function slugFromUrl(url) {
     return url.replace(BASE_URL, '').replace(/^\/|\/$/g, '');
 }
 
+async function resolveWpTermId(type, slug) {
+    const cacheKey = `wp_term_${type}_${slug}`;
+    const cached = cache.get(cacheKey);
+    if (cached !== undefined) return cached || null;
+
+    try {
+        const url = `${BASE_URL}/wp-json/wp/v2/${type}?slug=${encodeURIComponent(slug)}&per_page=1`;
+        const res = await axios.get(url, { headers: HEADERS, timeout: 10000 });
+        const id = res.data?.[0]?.id || null;
+        cache.set(cacheKey, id || 0, 86400);
+        return id;
+    } catch {
+        return null;
+    }
+}
+
+function mapWpPosts(posts) {
+    return (posts || []).map((p) => {
+        const title = decodeHtml(p?.title?.rendered || '').trim();
+        const slug = slugFromHref(p?.link || '');
+        const yearMatch = title.match(/\((\d{4})\)/);
+        return {
+            title,
+            slug,
+            year: yearMatch ? parseInt(yearMatch[1]) : undefined,
+        };
+    }).filter((p) => p.title && p.slug);
+}
+
+async function fetchCatalogFromWpApi(catalogId, page) {
+    const category = CATEGORIES[catalogId];
+    if (!category) return [];
+
+    const qs = [
+        'per_page=20',
+        `page=${page}`,
+        '_fields=link,title.rendered',
+    ];
+
+    if (category.path === '/') {
+        // newest, no extra filters
+    } else if (category.path.includes('/category/')) {
+        const id = await resolveWpTermId('categories', pathSlug(category.path));
+        if (!id) return [];
+        qs.push(`categories=${id}`);
+    } else if (category.path.includes('/tag/')) {
+        const id = await resolveWpTermId('tags', pathSlug(category.path));
+        if (!id) return [];
+        qs.push(`tags=${id}`);
+    } else {
+        const slug = pathSlug(category.path);
+        const catId = await resolveWpTermId('categories', slug);
+        const tagId = !catId ? await resolveWpTermId('tags', slug) : null;
+        if (catId) qs.push(`categories=${catId}`);
+        else if (tagId) qs.push(`tags=${tagId}`);
+        else return [];
+    }
+
+    try {
+        const url = `${BASE_URL}/wp-json/wp/v2/posts?${qs.join('&')}`;
+        const res = await axios.get(url, { headers: HEADERS, timeout: 12000 });
+        return mapWpPosts(res.data);
+    } catch {
+        return [];
+    }
+}
+
+async function searchFromWpApi(query) {
+    try {
+        const url = `${BASE_URL}/wp-json/wp/v2/posts?search=${encodeURIComponent(query)}&per_page=20&_fields=link,title.rendered`;
+        const res = await axios.get(url, { headers: HEADERS, timeout: 12000 });
+        return mapWpPosts(res.data);
+    } catch {
+        return [];
+    }
+}
+
 function parseTitle(fullTitle) {
     const yearMatch = fullTitle.match(/\((\d{4})\)/);
     const year = yearMatch ? parseInt(yearMatch[1]) : null;
@@ -45,6 +122,23 @@ function parseTitle(fullTitle) {
     let en = slashIdx > 0 ? fullTitle.substring(0, slashIdx).trim() : fullTitle;
     en = en.replace(/\s*\(\d{4}\)\s*/, '').replace(/\s*BG Audio\s*/i, '').trim();
     return { en, year };
+}
+
+function decodeHtml(text) {
+    return cheerio.load(`<div>${text || ''}</div>`)('div').text().trim();
+}
+
+function pathSlug(path) {
+    return String(path || '').replace(/^\/+|\/+$/g, '').split('/').pop() || '';
+}
+
+function slugFromHref(href) {
+    try {
+        const u = new URL(href);
+        return u.pathname.replace(/^\/+|\/+$/g, '');
+    } catch {
+        return slugFromUrl(href);
+    }
 }
 
 async function fetchPage(url) {
@@ -109,43 +203,35 @@ async function scrapeCatalog(catalogId, skip = 0) {
     let url = BASE_URL + category.path;
     if (page > 1) url += `page/${page}/`;
 
-    const html = await fetchPage(url);
-    if (!html) return [];
-
-    const $ = cheerio.load(html);
     const rawMovies = [];
+    const html = await fetchPage(url);
 
-    // Parse movie items
-    $('article, .video-item, .post, .item-video, div[id^="post-"]').each((i, el) => {
-        const $el = $(el);
-        const $link = $el.find('a').first();
-        const href = $link.attr('href');
-        if (!href || !href.includes('filmi2k.com/') || href.includes('/category/') || href.includes('/tag/') || href.includes('/page/')) return;
+    if (html) {
+        const $ = cheerio.load(html);
 
-        const title = $el.find('.entry-title, h2, h3, .title').first().text().trim()
-            || $link.attr('title') || $link.text().trim();
-        if (!title) return;
-
-        const slug = slugFromUrl(href);
-        const yearMatch = title.match(/\((\d{4})\)/);
-        const year = yearMatch ? parseInt(yearMatch[1]) : undefined;
-        rawMovies.push({ title, slug, year });
-    });
-
-    // Fallback link parsing
-    if (rawMovies.length === 0) {
-        $('a[href*="filmi2k.com/"]').each((i, el) => {
-            const href = $(el).attr('href');
-            if (!href || href === BASE_URL + '/' || href.includes('/category/') || href.includes('/tag/') || href.includes('/page/') || href.includes('#') || href.includes('svarzhete-se') || href.includes('?filter=')) return;
-            if (!href.match(/filmi2k\.com\/[\w-]+-\d{4}/)) return;
-            const title = $(el).text().trim() || $(el).attr('title') || '';
-            if (!title || title.length < 3) return;
+        // Parse movie items
+        $('article, .video-item, .post, .item-video, div[id^="post-"]').each((i, el) => {
+            const $el = $(el);
+            const $link = $el.find('a').first();
+            const href = $link.attr('href');
+            if (!href || !href.includes('filmi2k.com/')) return;
+            const title = $el.find('.entry-title, h2, h3, .title').first().text().trim() || $link.attr('title') || $link.text().trim();
+            if (!title) return;
             const slug = slugFromUrl(href);
-            if (rawMovies.find(m => m.slug === slug)) return;
             const yearMatch = title.match(/\((\d{4})\)/);
             rawMovies.push({ title, slug, year: yearMatch ? parseInt(yearMatch[1]) : undefined });
         });
     }
+
+    if (rawMovies.length === 0) {
+        const wpMovies = await fetchCatalogFromWpApi(catalogId, page);
+        rawMovies.push(...wpMovies);
+        if (wpMovies.length > 0) {
+            console.log(`[Catalog] ${catalogId}: using WP API fallback (${wpMovies.length} items)`);
+        }
+    }
+
+    if (rawMovies.length === 0) return [];
 
     // Resolve IMDb IDs in parallel (batches of 5)
     const metas = [];
@@ -182,36 +268,45 @@ async function searchMovies(query) {
 
     const url = `${BASE_URL}/?s=${encodeURIComponent(query)}`;
     const html = await fetchPage(url);
-    if (!html) return [];
-
-    const $ = cheerio.load(html);
     const rawMovies = [];
 
-    $('article, .video-item, .post, div[id^="post-"]').each((i, el) => {
-        const $el = $(el);
-        const $link = $el.find('a').first();
-        const href = $link.attr('href');
-        if (!href || !href.includes('filmi2k.com/')) return;
-        const title = $el.find('.entry-title, h2, h3, .title').first().text().trim() || $link.attr('title') || $link.text().trim();
-        if (!title) return;
-        const slug = slugFromUrl(href);
-        const yearMatch = title.match(/\((\d{4})\)/);
-        rawMovies.push({ title, slug, year: yearMatch ? parseInt(yearMatch[1]) : undefined });
-    });
+    if (html) {
+        const $ = cheerio.load(html);
 
-    // Fallback
-    if (rawMovies.length === 0) {
-        $('a[href*="filmi2k.com/"]').each((i, el) => {
-            const href = $(el).attr('href');
-            if (!href || href === BASE_URL + '/' || href.includes('/category/') || href.includes('/tag/') || href.includes('/page/') || href.includes('#') || href.includes('?s=')) return;
-            if (!href.match(/filmi2k\.com\/[\w-]+-\d{4}/)) return;
-            const title = $(el).text().trim();
-            if (!title || title.length < 3) return;
+        $('article, .video-item, .post, div[id^="post-"]').each((i, el) => {
+            const $el = $(el);
+            const $link = $el.find('a').first();
+            const href = $link.attr('href');
+            if (!href || !href.includes('filmi2k.com/')) return;
+            const title = $el.find('.entry-title, h2, h3, .title').first().text().trim() || $link.attr('title') || $link.text().trim();
+            if (!title) return;
             const slug = slugFromUrl(href);
-            if (rawMovies.find(m => m.slug === slug)) return;
             const yearMatch = title.match(/\((\d{4})\)/);
             rawMovies.push({ title, slug, year: yearMatch ? parseInt(yearMatch[1]) : undefined });
         });
+
+        // HTML fallback
+        if (rawMovies.length === 0) {
+            $('a[href*="filmi2k.com/"]').each((i, el) => {
+                const href = $(el).attr('href');
+                if (!href || href === BASE_URL + '/' || href.includes('/category/') || href.includes('/tag/') || href.includes('/page/') || href.includes('#') || href.includes('?s=')) return;
+                if (!href.match(/filmi2k\.com\/[\w-]+-\d{4}/)) return;
+                const title = $(el).text().trim();
+                if (!title || title.length < 3) return;
+                const slug = slugFromUrl(href);
+                if (rawMovies.find(m => m.slug === slug)) return;
+                const yearMatch = title.match(/\((\d{4})\)/);
+                rawMovies.push({ title, slug, year: yearMatch ? parseInt(yearMatch[1]) : undefined });
+            });
+        }
+    }
+
+    if (rawMovies.length === 0) {
+        const wpMovies = await searchFromWpApi(query);
+        rawMovies.push(...wpMovies);
+        if (wpMovies.length > 0) {
+            console.log(`[Search] using WP API fallback (${wpMovies.length} items)`);
+        }
     }
 
     const metas = [];
