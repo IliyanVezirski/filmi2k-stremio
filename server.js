@@ -237,16 +237,13 @@ app.get('/manifest.json', (req, res) => {
     res.json(manifest);
 });
 
-app.get('/catalog/:type/:id.json', (req, res, next) => {
-    const addon = buildAddon(null);
-    const router = getRouter(addon.getInterface());
-    router(req, res, next);
-});
-
-app.get('/stream/:type/:id.json', (req, res, next) => {
-    const addon = buildAddon(null);
-    const router = getRouter(addon.getInterface());
-    router(req, res, next);
+app.use((req, res, next) => {
+    if (req.path.startsWith('/catalog/') || req.path.startsWith('/stream/')) {
+        const addon = buildAddon(null);
+        const router = getRouter(addon.getInterface());
+        return router(req, res, next);
+    }
+    return next();
 });
 
 // Config-based addon routes
