@@ -44,27 +44,14 @@ if (VERBOSE) {
     console.log(`[PROXY] PROXY_URL from env: ${PROXY_URL || 'NULL - using default'}`);
 }
 
-function getProxyUrl(targetUrl) {
-    if (PROXY_URL) return PROXY_URL;
-    // Default: Jina.ai - requires different prefix for https vs http
-    if (targetUrl.startsWith('https://')) {
-        return 'https://r.jina.ai/https://';
-    }
-    return 'https://r.jina.ai/http://';
-}
-
-const proxyAxios = PROXY_URL
-    ? axios.create({ baseURL: PROXY_URL, timeout: 25000 })
-    : axios;
+const PROXY_BASE = 'https://api.allorigins.win/raw?url=';
 
 async function fetchUrl(url, options = {}) {
     const { headers = HEADERS, timeout = 15000, ...rest } = options;
-    // Use proxy only for HTML pages, NOT for WP API (wp-json works directly)
-    const useProxy = url.includes('filmi2k.com') && !url.includes('wp-json');
+    const useProxy = url.includes('filmi2k.com');
     if (useProxy) {
         if (VERBOSE) console.log(`[PROXY] Fetching via proxy: ${url}`);
-        const proxyBase = getProxyUrl(url);
-        const proxyFullUrl = `${proxyBase}${encodeURIComponent(url)}`;
+        const proxyFullUrl = `${PROXY_BASE}${encodeURIComponent(url)}`;
         if (VERBOSE) console.log(`[PROXY] Full proxy URL: ${proxyFullUrl}`);
         const res = await axios.get(proxyFullUrl, { headers, timeout, ...rest });
         return res.data;
