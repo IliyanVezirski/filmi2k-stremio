@@ -35,6 +35,10 @@ const HEADERS = {
 const VERBOSE = process.env.HTTP_DEBUG === '1';
 const PROXY_URL = process.env.PROXY_URL || null;
 
+if (VERBOSE && PROXY_URL) {
+    console.log(`[PROXY] Using: ${PROXY_URL}`);
+}
+
 const proxyAxios = PROXY_URL
     ? axios.create({ baseURL: PROXY_URL, timeout: 25000 })
     : axios;
