@@ -44,10 +44,10 @@ if (VERBOSE) {
     console.log(`[PROXY] PROXY_URL from env: ${PROXY_URL || 'NULL - using default'}`);
 }
 
-const PROXY_BASE = 'https://api.allorigins.win/raw?url=';
+const PROXY_BASE = 'https://api.codetabs.com/v1/proxy?quest=';
 
 async function fetchUrl(url, options = {}) {
-    const { headers = HEADERS, timeout = 15000, ...rest } = options;
+    const { headers = HEADERS, timeout = 30000, ...rest } = options;
     const useProxy = url.includes('filmi2k.com');
     if (useProxy) {
         if (VERBOSE) console.log(`[PROXY] Fetching via proxy: ${url}`);
