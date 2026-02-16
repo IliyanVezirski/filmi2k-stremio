@@ -33,13 +33,18 @@ const HEADERS = {
 };
 
 const VERBOSE = process.env.HTTP_DEBUG === '1';
-const PROXY_URL = process.env.PROXY_URL || null;
+let PROXY_URL = process.env.PROXY_URL || null;
+
+if (!PROXY_URL) {
+    PROXY_URL = 'https://corsproxy.io/?=';
+    if (VERBOSE) console.log(`[PROXY] Using default proxy (env not set): ${PROXY_URL}`);
+}
 
 if (VERBOSE) {
     console.log(`[PROXY] VERBOSE mode enabled`);
-    console.log(`[PROXY] PROXY_URL from env: ${PROXY_URL || 'NULL - NOT SET!'}`);
+    console.log(`[PROXY] PROXY_URL from env: ${PROXY_URL}`);
     if (!PROXY_URL) {
-        console.error(`[PROXY] ERROR: PROXY_URL is not set! Set it in Render Dashboard env vars!`);
+        console.error(`[PROXY] ERROR: PROXY_URL is not set!`);
     }
 }
 
