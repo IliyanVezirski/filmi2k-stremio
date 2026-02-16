@@ -44,7 +44,7 @@ if (VERBOSE) {
     console.log(`[PROXY] PROXY_URL from env: ${PROXY_URL || 'NULL - using default'}`);
 }
 
-const PROXY_BASE = 'https://api.codetabs.com/v1/proxy?quest=';
+const PROXY_BASE = 'https://api.allorigins.win/get?url=';
 
 async function fetchUrl(url, options = {}) {
     const { headers = HEADERS, timeout = 30000, ...rest } = options;
@@ -54,7 +54,8 @@ async function fetchUrl(url, options = {}) {
         const proxyFullUrl = `${PROXY_BASE}${encodeURIComponent(url)}`;
         if (VERBOSE) console.log(`[PROXY] Full proxy URL: ${proxyFullUrl}`);
         const res = await axios.get(proxyFullUrl, { headers, timeout, ...rest });
-        return res.data;
+        const data = typeof res.data === 'string' ? res.data : res.data.contents;
+        return data;
     }
     if (VERBOSE) console.log(`[HTTP] Direct fetch: ${url}`);
     const res = await axios.get(url, { headers, timeout, ...rest });
