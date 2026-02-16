@@ -48,9 +48,10 @@ const PROXY_BASE = 'https://filmi2k-proxy.ilian-vezirski.workers.dev/proxy/';
 
 async function fetchUrl(url, options = {}) {
     const { headers = HEADERS, timeout = 15000, ...rest } = options;
-    const useProxy = url.includes('filmi2k.com') && !url.includes('wp-json');
+    // Use worker proxy for ALL filmi2k.com requests (direct requests are blocked by Cloudflare)
+    const useProxy = url.includes('filmi2k.com');
     if (useProxy) {
-        if (VERBOSE) console.log(`[PROXY] Fetching via proxy: ${url}`);
+        if (VERBOSE) console.log(`[PROXY] Fetching via CF worker: ${url}`);
         const proxyFullUrl = `${PROXY_BASE}${encodeURIComponent(url)}`;
         if (VERBOSE) console.log(`[PROXY] Full proxy URL: ${proxyFullUrl}`);
         const res = await axios.get(proxyFullUrl, { headers, timeout, ...rest });
