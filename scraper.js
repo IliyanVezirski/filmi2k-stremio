@@ -33,6 +33,23 @@ const HEADERS = {
 };
 
 const VERBOSE = process.env.HTTP_DEBUG === '1';
+const PROXY_URL = process.env.PROXY_URL || null;
+
+const proxyAxios = PROXY_URL
+    ? axios.create({ baseURL: PROXY_URL, timeout: 25000 })
+    : axios;
+
+async function fetchUrl(url, options = {}) {
+    const { headers = HEADERS, timeout = 15000, ...rest } = options;
+    const useProxy = PROXY_URL && url.includes('filmi2k.com');
+    if (useProxy) {
+        const res = await proxyAxios.get(encodeURIComponent(url), { headers, timeout, ...rest });
+        return res.data;
+    }
+    const res = await axios.get(url, { headers, timeout, ...rest });
+    return res.data;
+}
+
 if (VERBOSE) {
     axios.interceptors.request.use((cfg) => {
         try {
@@ -75,8 +92,8 @@ async function resolveWpTermId(type, slug) {
 
     try {
         const url = `${BASE_URL}/wp-json/wp/v2/${type}?slug=${encodeURIComponent(slug)}&per_page=1`;
-        const res = await axios.get(url, { headers: HEADERS, timeout: 10000 });
-        const id = res.data?.[0]?.id || null;
+        const data = await fetchUrl(url, { timeout: 10000 });
+        const id = data?.[0]?.id || null;
         cache.set(cacheKey, id || 0, 86400);
         return id;
     } catch {
@@ -128,8 +145,8 @@ async function fetchCatalogFromWpApi(catalogId, page) {
 
     try {
         const url = `${BASE_URL}/wp-json/wp/v2/posts?${qs.join('&')}`;
-        const res = await axios.get(url, { headers: HEADERS, timeout: 12000 });
-        return mapWpPosts(res.data);
+        const data = await fetchUrl(url, { timeout: 12000 });
+        return mapWpPosts(data);
     } catch {
         return [];
     }
@@ -138,8 +155,8 @@ async function fetchCatalogFromWpApi(catalogId, page) {
 async function searchFromWpApi(query) {
     try {
         const url = `${BASE_URL}/wp-json/wp/v2/posts?search=${encodeURIComponent(query)}&per_page=20&_fields=link,title.rendered`;
-        const res = await axios.get(url, { headers: HEADERS, timeout: 12000 });
-        return mapWpPosts(res.data);
+        const data = await fetchUrl(url, { timeout: 12000 });
+        return mapWpPosts(data);
     } catch {
         return [];
     }
@@ -173,8 +190,8 @@ function slugFromHref(href) {
 
 async function fetchPage(url) {
     try {
-        const res = await axios.get(url, { headers: HEADERS, timeout: 15000 });
-        return res.data;
+        const data = await fetchUrl(url);
+        return data;
     } catch (e) {
         console.error(`[Fetch] ${url}: ${e.message}`);
         return null;

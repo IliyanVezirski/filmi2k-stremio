@@ -10,3 +10,5 @@ services:
         value: production
       - key: HTTP_DEBUG
         value: "1"
+      - key: PROXY_URL
+        value: "https://corsproxy.io/?"
