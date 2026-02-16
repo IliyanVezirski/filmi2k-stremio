@@ -59,7 +59,7 @@ const proxyAxios = PROXY_URL
 
 async function fetchUrl(url, options = {}) {
     const { headers = HEADERS, timeout = 15000, ...rest } = options;
-    const useProxy = (PROXY_URL || !url.startsWith('http')) && url.includes('filmi2k.com');
+    const useProxy = url.includes('filmi2k.com');
     if (useProxy) {
         if (VERBOSE) console.log(`[PROXY] Fetching via proxy: ${url}`);
         const proxyBase = getProxyUrl(url);
