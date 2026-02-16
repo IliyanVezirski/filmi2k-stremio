@@ -59,7 +59,8 @@ const proxyAxios = PROXY_URL
 
 async function fetchUrl(url, options = {}) {
     const { headers = HEADERS, timeout = 15000, ...rest } = options;
-    const useProxy = url.includes('filmi2k.com');
+    // Use proxy only for HTML pages, NOT for WP API (wp-json works directly)
+    const useProxy = url.includes('filmi2k.com') && !url.includes('wp-json');
     if (useProxy) {
         if (VERBOSE) console.log(`[PROXY] Fetching via proxy: ${url}`);
         const proxyBase = getProxyUrl(url);
@@ -270,34 +271,37 @@ async function scrapeCatalog(catalogId, skip = 0) {
     const cached = cache.get(cacheKey);
     if (cached) return cached;
 
-    let url = BASE_URL + category.path;
-    if (page > 1) url += `page/${page}/`;
-
     const rawMovies = [];
-    const html = await fetchPage(url);
 
-    if (html) {
-        const $ = cheerio.load(html);
-
-        // Parse movie items
-        $('article, .video-item, .post, .item-video, div[id^="post-"]').each((i, el) => {
-            const $el = $(el);
-            const $link = $el.find('a').first();
-            const href = $link.attr('href');
-            if (!href || !href.includes('filmi2k.com/')) return;
-            const title = $el.find('.entry-title, h2, h3, .title').first().text().trim() || $link.attr('title') || $link.text().trim();
-            if (!title) return;
-            const slug = slugFromUrl(href);
-            const yearMatch = title.match(/\((\d{4})\)/);
-            rawMovies.push({ title, slug, year: yearMatch ? parseInt(yearMatch[1]) : undefined });
-        });
+    // Try WP API first (works without proxy)
+    const wpMovies = await fetchCatalogFromWpApi(catalogId, page);
+    if (wpMovies.length > 0) {
+        rawMovies.push(...wpMovies);
+        console.log(`[Catalog] ${catalogId}: using WP API (${wpMovies.length} items)`);
     }
 
+    // Fallback to HTML scraping if WP API returns nothing
     if (rawMovies.length === 0) {
-        const wpMovies = await fetchCatalogFromWpApi(catalogId, page);
-        rawMovies.push(...wpMovies);
-        if (wpMovies.length > 0) {
-            console.log(`[Catalog] ${catalogId}: using WP API fallback (${wpMovies.length} items)`);
+        let url = BASE_URL + category.path;
+        if (page > 1) url += `page/${page}/`;
+        
+        const html = await fetchPage(url);
+        if (html) {
+            const $ = cheerio.load(html);
+            $('article, .video-item, .post, .item-video, div[id^="post-"]').each((i, el) => {
+                const $el = $(el);
+                const $link = $el.find('a').first();
+                const href = $link.attr('href');
+                if (!href || !href.includes('filmi2k.com/')) return;
+                const title = $el.find('.entry-title, h2, h3, .title').first().text().trim() || $link.attr('title') || $link.text().trim();
+                if (!title) return;
+                const slug = slugFromUrl(href);
+                const yearMatch = title.match(/\((\d{4})\)/);
+                rawMovies.push({ title, slug, year: yearMatch ? parseInt(yearMatch[1]) : undefined });
+            });
+            if (rawMovies.length > 0) {
+                console.log(`[Catalog] ${catalogId}: using HTML fallback (${rawMovies.length} items)`);
+            }
         }
     }
 
@@ -336,50 +340,51 @@ async function searchMovies(query) {
     const cached = cache.get(cacheKey);
     if (cached) return cached;
 
-    const url = `${BASE_URL}/?s=${encodeURIComponent(query)}`;
-    const html = await fetchPage(url);
     const rawMovies = [];
 
-    if (html) {
-        const $ = cheerio.load(html);
-
-        $('article, .video-item, .post, div[id^="post-"]').each((i, el) => {
-            const $el = $(el);
-            const $link = $el.find('a').first();
-            const href = $link.attr('href');
-            if (!href || !href.includes('filmi2k.com/')) return;
-            const title = $el.find('.entry-title, h2, h3, .title').first().text().trim() || $link.attr('title') || $link.text().trim();
-            if (!title) return;
-            const slug = slugFromUrl(href);
-            const yearMatch = title.match(/\((\d{4})\)/);
-            rawMovies.push({ title, slug, year: yearMatch ? parseInt(yearMatch[1]) : undefined });
-        });
-
-        // HTML fallback
-        if (rawMovies.length === 0) {
-            $('a[href*="filmi2k.com/"]').each((i, el) => {
-                const href = $(el).attr('href');
-                if (!href || href === BASE_URL + '/' || href.includes('/category/') || href.includes('/tag/') || href.includes('/page/') || href.includes('#') || href.includes('?s=')) return;
-                if (!href.match(/filmi2k\.com\/[\w-]+-\d{4}/)) return;
-                const title = $(el).text().trim();
-                if (!title || title.length < 3) return;
-                const slug = slugFromUrl(href);
-                if (rawMovies.find(m => m.slug === slug)) return;
-                const yearMatch = title.match(/\((\d{4})\)/);
-                rawMovies.push({ title, slug, year: yearMatch ? parseInt(yearMatch[1]) : undefined });
-            });
-        }
+    const wpMovies = await searchFromWpApi(query);
+    if (wpMovies.length > 0) {
+        rawMovies.push(...wpMovies);
+        console.log(`[Search] using WP API (${wpMovies.length} items)`);
     }
 
     if (rawMovies.length === 0) {
-        const wpMovies = await searchFromWpApi(query);
-        rawMovies.push(...wpMovies);
-        if (wpMovies.length > 0) {
-            console.log(`[Search] using WP API fallback (${wpMovies.length} items)`);
+        const url = `${BASE_URL}/?s=${encodeURIComponent(query)}`;
+        const html = await fetchPage(url);
+
+        if (html) {
+            const $ = cheerio.load(html);
+
+            $('article, .video-item, .post, div[id^="post-"]').each((i, el) => {
+                const $el = $(el);
+                const $link = $el.find('a').first();
+                const href = $link.attr('href');
+                if (!href || !href.includes('filmi2k.com/')) return;
+                const title = $el.find('.entry-title, h2, h3, .title').first().text().trim() || $link.attr('title') || $link.text().trim();
+                if (!title) return;
+                const slug = slugFromUrl(href);
+                const yearMatch = title.match(/\((\d{4})\)/);
+                rawMovies.push({ title, slug, year: yearMatch ? parseInt(yearMatch[1]) : undefined });
+            });
+
+            if (rawMovies.length === 0) {
+                $('a[href*="filmi2k.com/"]').each((i, el) => {
+                    const href = $(el).attr('href');
+                    if (!href || href === BASE_URL + '/' || href.includes('/category/') || href.includes('/tag/') || href.includes('/page/') || href.includes('#') || href.includes('?s=')) return;
+                    if (!href.match(/filmi2k\.com\/[\w-]+-\d{4}/)) return;
+                    const title = $(el).text().trim();
+                    if (!title || title.length < 3) return;
+                    const slug = slugFromUrl(href);
+                    if (rawMovies.find(m => m.slug === slug)) return;
+                    const yearMatch = title.match(/\((\d{4})\)/);
+                    rawMovies.push({ title, slug, year: yearMatch ? parseInt(yearMatch[1]) : undefined });
+                });
+            }
         }
     }
 
-    const metas = [];
+    if (rawMovies.length === 0) return [];
+
     for (let i = 0; i < rawMovies.length; i += 5) {
         const batch = rawMovies.slice(i, i + 5);
         const results = await Promise.all(batch.map(async (m) => {
