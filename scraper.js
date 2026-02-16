@@ -47,8 +47,8 @@ if (VERBOSE) {
 const PROXY_BASE = 'https://api.allorigins.win/get?url=';
 
 async function fetchUrl(url, options = {}) {
-    const { headers = HEADERS, timeout = 30000, ...rest } = options;
-    const useProxy = url.includes('filmi2k.com');
+    const { headers = HEADERS, timeout = 15000, ...rest } = options;
+    const useProxy = url.includes('filmi2k.com') && !url.includes('wp-json');
     if (useProxy) {
         if (VERBOSE) console.log(`[PROXY] Fetching via proxy: ${url}`);
         const proxyFullUrl = `${PROXY_BASE}${encodeURIComponent(url)}`;
