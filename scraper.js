@@ -32,6 +32,36 @@ const HEADERS = {
     'Referer': BASE_URL,
 };
 
+const VERBOSE = process.env.HTTP_DEBUG === '1';
+if (VERBOSE) {
+    axios.interceptors.request.use((cfg) => {
+        try {
+            const m = (cfg.method || 'GET').toUpperCase();
+            const u = cfg.url || '';
+            console.log(`[HTTP] ${m} ${u}`);
+        } catch {}
+        return cfg;
+    });
+}
+axios.interceptors.response.use(
+    (res) => res,
+    (err) => {
+        try {
+            const r = err && err.response;
+            if (r) {
+                const u = r.config && r.config.url ? r.config.url : '';
+                console.error(`[HTTP] ${r.status} ${u}`);
+                const h = r.headers || {};
+                const info = { server: h.server, 'cf-ray': h['cf-ray'], 'content-type': h['content-type'] };
+                console.error(`[HTTP] ${JSON.stringify(info)}`);
+            } else if (err && err.message) {
+                console.error(`[HTTP] ${err.message}`);
+            }
+        } catch {}
+        return Promise.reject(err);
+    }
+);
+
 // ─── Helpers ─────────────────────────────────────────────
 
 function slugFromUrl(url) {
@@ -165,7 +195,7 @@ async function resolveImdbId(title, year, slug) {
         const parsed = parseTitle(title);
         const query = encodeURIComponent(parsed.en);
         const url = `https://v3-cinemeta.strem.io/catalog/movie/top/search=${query}.json`;
-        const res = await axios.get(url, { timeout: 8000 });
+        const res = await axios.get(url, { timeout: 8000, headers: { 'User-Agent': HEADERS['User-Agent'] } });
         const metas = res.data.metas || [];
 
         const y = String(parsed.year || year);
@@ -341,7 +371,7 @@ async function scrapeStreams(imdbId) {
     // If no cached mapping, search filmi2k by Cinemeta title
     if (!slug) {
         try {
-            const metaRes = await axios.get(`https://v3-cinemeta.strem.io/meta/movie/${imdbId}.json`, { timeout: 8000 });
+            const metaRes = await axios.get(`https://v3-cinemeta.strem.io/meta/movie/${imdbId}.json`, { timeout: 8000, headers: { 'User-Agent': HEADERS['User-Agent'] } });
             const meta = metaRes.data.meta;
             if (meta && meta.name) {
                 const searchHtml = await fetchPage(`${BASE_URL}/?s=${encodeURIComponent(meta.name)}`);
