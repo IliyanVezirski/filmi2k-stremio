@@ -35,6 +35,11 @@ const HEADERS = {
 const VERBOSE = process.env.HTTP_DEBUG === '1';
 const PROXY_URL = process.env.PROXY_URL || null;
 
+if (VERBOSE) {
+    console.log(`[PROXY] VERBOSE mode enabled`);
+    console.log(`[PROXY] PROXY_URL from env: ${PROXY_URL}`);
+}
+
 if (VERBOSE && PROXY_URL) {
     console.log(`[PROXY] Using: ${PROXY_URL}`);
 }
@@ -47,10 +52,13 @@ async function fetchUrl(url, options = {}) {
     const { headers = HEADERS, timeout = 15000, ...rest } = options;
     const useProxy = PROXY_URL && url.includes('filmi2k.com');
     if (useProxy) {
+        if (VERBOSE) console.log(`[PROXY] Fetching via proxy: ${url}`);
         const proxyFullUrl = `${PROXY_URL}${encodeURIComponent(url)}`;
+        if (VERBOSE) console.log(`[PROXY] Full proxy URL: ${proxyFullUrl}`);
         const res = await axios.get(proxyFullUrl, { headers, timeout, ...rest });
         return res.data;
     }
+    if (VERBOSE) console.log(`[HTTP] Direct fetch: ${url}`);
     const res = await axios.get(url, { headers, timeout, ...rest });
     return res.data;
 }
