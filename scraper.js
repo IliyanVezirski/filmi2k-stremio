@@ -37,7 +37,10 @@ const PROXY_URL = process.env.PROXY_URL || null;
 
 if (VERBOSE) {
     console.log(`[PROXY] VERBOSE mode enabled`);
-    console.log(`[PROXY] PROXY_URL from env: ${PROXY_URL}`);
+    console.log(`[PROXY] PROXY_URL from env: ${PROXY_URL || 'NULL - NOT SET!'}`);
+    if (!PROXY_URL) {
+        console.error(`[PROXY] ERROR: PROXY_URL is not set! Set it in Render Dashboard env vars!`);
+    }
 }
 
 if (VERBOSE && PROXY_URL) {
