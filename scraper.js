@@ -36,20 +36,21 @@ const VERBOSE = process.env.HTTP_DEBUG === '1';
 let PROXY_URL = process.env.PROXY_URL || null;
 
 if (!PROXY_URL) {
-    PROXY_URL = 'https://corsproxy.io/?=';
-    if (VERBOSE) console.log(`[PROXY] Using default proxy (env not set): ${PROXY_URL}`);
+    if (VERBOSE) console.log(`[PROXY] Using default proxy (Jina.ai)`);
 }
 
 if (VERBOSE) {
     console.log(`[PROXY] VERBOSE mode enabled`);
-    console.log(`[PROXY] PROXY_URL from env: ${PROXY_URL}`);
-    if (!PROXY_URL) {
-        console.error(`[PROXY] ERROR: PROXY_URL is not set!`);
-    }
+    console.log(`[PROXY] PROXY_URL from env: ${PROXY_URL || 'NULL - using default'}`);
 }
 
-if (VERBOSE && PROXY_URL) {
-    console.log(`[PROXY] Using: ${PROXY_URL}`);
+function getProxyUrl(targetUrl) {
+    if (PROXY_URL) return PROXY_URL;
+    // Default: Jina.ai - requires different prefix for https vs http
+    if (targetUrl.startsWith('https://')) {
+        return 'https://r.jina.ai/https://';
+    }
+    return 'https://r.jina.ai/http://';
 }
 
 const proxyAxios = PROXY_URL
@@ -58,10 +59,11 @@ const proxyAxios = PROXY_URL
 
 async function fetchUrl(url, options = {}) {
     const { headers = HEADERS, timeout = 15000, ...rest } = options;
-    const useProxy = PROXY_URL && url.includes('filmi2k.com');
+    const useProxy = (PROXY_URL || !url.startsWith('http')) && url.includes('filmi2k.com');
     if (useProxy) {
         if (VERBOSE) console.log(`[PROXY] Fetching via proxy: ${url}`);
-        const proxyFullUrl = `${PROXY_URL}${encodeURIComponent(url)}`;
+        const proxyBase = getProxyUrl(url);
+        const proxyFullUrl = `${proxyBase}${encodeURIComponent(url)}`;
         if (VERBOSE) console.log(`[PROXY] Full proxy URL: ${proxyFullUrl}`);
         const res = await axios.get(proxyFullUrl, { headers, timeout, ...rest });
         return res.data;
