@@ -43,7 +43,8 @@ async function fetchUrl(url, options = {}) {
     const { headers = HEADERS, timeout = 15000, ...rest } = options;
     const useProxy = PROXY_URL && url.includes('filmi2k.com');
     if (useProxy) {
-        const res = await proxyAxios.get(encodeURIComponent(url), { headers, timeout, ...rest });
+        const proxyFullUrl = `${PROXY_URL}${encodeURIComponent(url)}`;
+        const res = await axios.get(proxyFullUrl, { headers, timeout, ...rest });
         return res.data;
     }
     const res = await axios.get(url, { headers, timeout, ...rest });
