@@ -44,18 +44,51 @@ if (VERBOSE) {
     console.log(`[PROXY] PROXY_URL from env: ${PROXY_URL || 'NULL - using default'}`);
 }
 
-const PROXY_BASE = 'https://filmi2k-proxy.ilian-vezirski.workers.dev/proxy/';
+const PROXY_LIST = [
+    'https://api.allorigins.win/raw?url=',
+    'https://corsproxy.io/?',
+    'https://api.codetabs.com/v1/proxy?quest=',
+    'https://proxy.vini.workers.dev/?',
+];
+
+let currentProxyIndex = 0;
+
+function getProxyBase() {
+    return PROXY_LIST[currentProxyIndex];
+}
+
+function rotateProxy() {
+    currentProxyIndex = (currentProxyIndex + 1) % PROXY_LIST.length;
+    if (VERBOSE) console.log(`[PROXY] Rotated to: ${getProxyBase()}`);
+}
 
 async function fetchUrl(url, options = {}) {
     const { headers = HEADERS, timeout = 15000, ...rest } = options;
-    // Use worker proxy for ALL filmi2k.com requests (direct requests are blocked by Cloudflare)
-    const useProxy = url.includes('filmi2k.com');
+    // Use proxy for filmi2k.com requests (direct requests are blocked by Cloudflare)
+    const useProxy = url.includes('filmi2k.com') && !url.includes('localhost');
     if (useProxy) {
-        if (VERBOSE) console.log(`[PROXY] Fetching via CF worker: ${url}`);
-        const proxyFullUrl = `${PROXY_BASE}${encodeURIComponent(url)}`;
-        if (VERBOSE) console.log(`[PROXY] Full proxy URL: ${proxyFullUrl}`);
-        const res = await axios.get(proxyFullUrl, { headers, timeout, ...rest });
-        return res.data;
+        let lastError = null;
+        for (let attempt = 0; attempt < PROXY_LIST.length; attempt++) {
+            try {
+                const proxyBase = getProxyBase();
+                if (VERBOSE) console.log(`[PROXY] Fetching via ${proxyBase}: ${url}`);
+                const proxyFullUrl = `${proxyBase}${encodeURIComponent(url)}`;
+                const res = await axios.get(proxyFullUrl, { 
+                    headers: { 
+                        ...headers,
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    },
+                    timeout, 
+                    ...rest 
+                });
+                return res.data;
+            } catch (e) {
+                lastError = e;
+                if (VERBOSE) console.log(`[PROXY] Failed: ${e.message}, rotating...`);
+                rotateProxy();
+            }
+        }
+        throw lastError || new Error('All proxies failed');
     }
     if (VERBOSE) console.log(`[HTTP] Direct fetch: ${url}`);
     const res = await axios.get(url, { headers, timeout, ...rest });
