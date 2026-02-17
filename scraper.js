@@ -46,11 +46,9 @@ if (VERBOSE) {
 }
 
 const PROXY_LIST = [
-    // Scraping APIs - these use real browsers to bypass Cloudflare
-    'https://scrape.r.jina.ai/http://',
-    'https://scrape.r.jina.ai/https://',
-    // Fallback: direct with Cloudflare bypass headers
-    null, 
+    // Jina.ai reader API (works for many sites)
+    'https://r.jina.ai/http://',
+    'https://r.jina.ai/https://',
 ];
 
 let currentProxyIndex = 0;
