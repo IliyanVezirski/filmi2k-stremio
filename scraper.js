@@ -45,7 +45,11 @@ if (VERBOSE) {
 }
 
 const PROXY_LIST = [
-    'https://filmi2k-proxy.ilian-vezirski.workers.dev/proxy/',
+    // Scraping APIs - these use real browsers to bypass Cloudflare
+    'https://scrape.r.jina.ai/http://',
+    'https://scrape.r.jina.ai/https://',
+    // Fallback: direct with Cloudflare bypass headers
+    null, 
 ];
 
 let currentProxyIndex = 0;
@@ -68,6 +72,24 @@ async function fetchUrl(url, options = {}) {
         for (let attempt = 0; attempt < PROXY_LIST.length; attempt++) {
             try {
                 const proxyBase = getProxyBase();
+                
+                // If no proxy (null), try direct with bypass headers
+                if (!proxyBase) {
+                    if (VERBOSE) console.log(`[HTTP] Direct fetch (bypass): ${url}`);
+                    const bypassHeaders = {
+                        ...headers,
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                        'Accept-Language': 'bg-BG,bg;q=0.9,en;q=0.8',
+                        'Accept-Encoding': 'gzip, deflate, br',
+                        'Connection': 'keep-alive',
+                        'Upgrade-Insecure-Requests': '1',
+                        'DNT': '1',
+                    };
+                    const res = await axios.get(url, { headers: bypassHeaders, timeout, ...rest });
+                    return res.data;
+                }
+                
                 if (VERBOSE) console.log(`[PROXY] Fetching via ${proxyBase}: ${url}`);
                 const proxyFullUrl = `${proxyBase}${encodeURIComponent(url)}`;
                 const res = await axios.get(proxyFullUrl, { 
