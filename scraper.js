@@ -46,9 +46,11 @@ if (VERBOSE) {
 }
 
 const PROXY_LIST = [
-    // Jina.ai reader API (works for many sites)
+    // Jina.ai reader API
     'https://r.jina.ai/http://',
     'https://r.jina.ai/https://',
+    // ScrapingBypass (free API)
+    'https://api.scrapingbypass.com/?url=',
 ];
 
 let currentProxyIndex = 0;
