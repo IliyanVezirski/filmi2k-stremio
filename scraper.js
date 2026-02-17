@@ -1,4 +1,5 @@
 const axios = require('axios');
+const cloudscraper = require('cloudscraper');
 const cheerio = require('cheerio');
 const NodeCache = require('node-cache');
 
@@ -64,16 +65,32 @@ function rotateProxy() {
 }
 
 async function fetchUrl(url, options = {}) {
-    const { headers = HEADERS, timeout = 25000, ...rest } = options;
+    const { headers = HEADERS, timeout = 30000, ...rest } = options;
     // Use proxy for filmi2k.com requests (direct requests are blocked by Cloudflare)
     const useProxy = url.includes('filmi2k.com') && !url.includes('localhost');
     if (useProxy) {
+        // Try cloudscraper first (handles Cloudflare JS challenges)
+        try {
+            if (VERBOSE) console.log(`[CLOUD] Trying cloudscraper: ${url}`);
+            const result = await cloudscraper.get(url, {
+                timeout: timeout,
+                headers: {
+                    ...headers,
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                    'Accept-Language': 'bg-BG,bg;q=0.9,en-US;q=0.8,en;q=0.7',
+                }
+            });
+            return result;
+        } catch (e) {
+            if (VERBOSE) console.log(`[CLOUD] cloudscraper failed: ${e.message}`);
+        }
+        
+        // Fallback: try proxy services
         let lastError = null;
         for (let attempt = 0; attempt < PROXY_LIST.length; attempt++) {
             try {
                 const proxyBase = getProxyBase();
                 
-                // If no proxy (null), try direct with bypass headers
                 if (!proxyBase) {
                     if (VERBOSE) console.log(`[HTTP] Direct fetch (bypass): ${url}`);
                     const bypassHeaders = {
