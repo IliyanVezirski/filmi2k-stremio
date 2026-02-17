@@ -45,10 +45,7 @@ if (VERBOSE) {
 }
 
 const PROXY_LIST = [
-    'https://api.allorigins.win/raw?url=',
-    'https://corsproxy.io/?',
-    'https://api.codetabs.com/v1/proxy?quest=',
-    'https://proxy.vini.workers.dev/?',
+    'https://filmi2k-proxy.ilian-vezirski.workers.dev/proxy/',
 ];
 
 let currentProxyIndex = 0;
@@ -63,7 +60,7 @@ function rotateProxy() {
 }
 
 async function fetchUrl(url, options = {}) {
-    const { headers = HEADERS, timeout = 15000, ...rest } = options;
+    const { headers = HEADERS, timeout = 25000, ...rest } = options;
     // Use proxy for filmi2k.com requests (direct requests are blocked by Cloudflare)
     const useProxy = url.includes('filmi2k.com') && !url.includes('localhost');
     if (useProxy) {
